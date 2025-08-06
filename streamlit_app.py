@@ -9,11 +9,17 @@ import os
 from io import BytesIO
 import re
 
-def format_latex_blocks(text):
-    # Wraps formulas like E = \frac{...} in $$...$$ if not already wrapped
-    text = re.sub(r"\[([^\[\]]*\\frac[^\[\]]*)\]", r"$$\1$$", text)
-    return re.sub(r"(?<!\$)\[?\s*(E\s*=\s*\\frac.*?)(\]|\n|$)", r"$$\1$$", text, flags=re.DOTALL)
+def clean_latex_output(text):
+    # Remove broken inline LaTeX like \( ... \)
+    text = re.sub(r"\\\(|\\\)", "", text)
 
+    # Ensure each block LaTeX formula is wrapped in $$...$$
+    text = re.sub(r"(?<!\$)\[?\s*(E\s*=\s*\\frac.*?)(\]|\n|$)", r"$$\1$$", text, flags=re.DOTALL)
+
+    # Avoid quadruple $$ by removing repeated wraps
+    text = re.sub(r"\${4,}", "$$", text)
+
+    return text
 
 
 # Load secrets securely from Streamlit Cloud
