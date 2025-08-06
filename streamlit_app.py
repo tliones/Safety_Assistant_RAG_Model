@@ -61,7 +61,7 @@ def clean_and_render_response(text):
             processed_line = line
             
             # Handle inline math with single $ (convert to LaTeX format for markdown)
-            processed_line = re.sub(r'\$([^$]+)\
+            processed_line = re.sub(r'\$([^$]+)\$', r'$\1$', processed_line)
 
 # Load secrets securely from Streamlit Cloud
 openai.api_key = st.secrets["OPENAI_API_KEY"]
@@ -451,4 +451,3 @@ Answer:"""
 
 else:
     st.warning("No documents selected or no valid files found.")
-
