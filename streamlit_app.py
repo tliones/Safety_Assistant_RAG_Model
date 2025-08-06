@@ -9,30 +9,56 @@ import os
 from io import BytesIO
 import re
 
-def clean_latex_output(text):
-    import re
-
-    # Remove \text{} and \mathrm{} (causes rendering issues)
-    text = re.sub(r"\\text\{(.*?)\}", r"\1", text)
-    text = re.sub(r"\\mathrm\{(.*?)\}", r"\1", text)
-
-    # Inline math: wrap common symbols in $
-    inline_terms = [r"C_i", r"T_i", r"\\sum", r"\\times"]
-    for term in inline_terms:
-        text = re.sub(rf"(?<!\$)\b({term})\b(?!\$)", r'$\1$', text)
-
-    # Block math: wrap \frac{...}{...} lines in $$...$$ if not already
-    text = re.sub(r"(?<!\$)\s*(\\frac\{[^}]+\}\{[^}]+\})\s*(?!\$)", r"$$\1$$", text)
-
-    # Remove any leftover double-prefix like "TWA = $$..."
-    text = re.sub(r"^\s*\w+\s*=\s*\$\$(.*?)\$\$", r"$$\1$$", text, flags=re.MULTILINE)
-
-    return text
-
-
-
-
-
+def clean_and_render_response(text):
+    """
+    Clean and properly render text with LaTeX formulas in Streamlit
+    """
+    # Split text into lines for processing
+    lines = text.split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if not line:  # Empty line
+            st.write("")
+            continue
+            
+        # Check if line contains LaTeX math (starts with $$ or contains LaTeX commands)
+        if (line.startswith('$$') and line.endswith('$$')) or \
+           re.search(r'\\(frac|sum|int|sqrt|alpha|beta|gamma|delta|times|cdot|partial)', line):
+            
+            # Clean the LaTeX
+            latex_line = line
+            
+            # Remove outer $$ if present
+            if latex_line.startswith('$$') and latex_line.endswith('$$'):
+                latex_line = latex_line[2:-2]
+            
+            # Remove problematic LaTeX commands
+            latex_line = re.sub(r'\\text\{([^}]*)\}', r'\1', latex_line)
+            latex_line = re.sub(r'\\mathrm\{([^}]*)\}', r'\1', latex_line)
+            
+            # Remove any prefix like "TWA = " or "Formula: "
+            latex_line = re.sub(r'^[A-Za-z\s]*=\s*', '', latex_line)
+            latex_line = re.sub(r'^[A-Za-z\s]*:\s*', '', latex_line)
+            
+            try:
+                st.latex(latex_line)
+            except Exception as e:
+                # Fallback to markdown if LaTeX fails
+                st.markdown(f"`{line}`")
+                
+        else:
+            # Regular text - check for inline math
+            # Convert inline LaTeX markers
+            processed_line = line
+            
+            # Handle inline math with single $ (convert to LaTeX format for markdown)
+            processed_line = re.sub(r'\$([^$]+)\$', r'$\1$', processed_line)
+            
+            # Clean any remaining problematic LaTeX in inline math
+            processed_line = re.sub(r'\\text\{([^}]*)\}', r'\1', processed_line)
+            
+            st.markdown(processed_line, unsafe_allow_html=True)
 
 # Load secrets securely from Streamlit Cloud
 openai.api_key = st.secrets["OPENAI_API_KEY"]
@@ -81,7 +107,6 @@ for doc_name in selected_docs:
         st.error(f"Error loading {doc_name}: {e}")
 
 if all_dfs:
-
     combined_df = pd.concat(all_dfs, ignore_index=True)
     combined_embeddings = np.vstack(all_embeddings)
 
@@ -115,41 +140,43 @@ if all_dfs:
             minimal_context += f"{section_info}\n"
             full_context += f"{section_info}\n{row['text']}\n\n"
 
-        prompt = f"Context:\n{full_context}\n\nQuestion: {question}\n\nInstructions: If your answer includes formulas, place them on their own line using LaTeX inside double dollar signs like $$...$$. Do not include math inside narrative sentences. Avoid using \\text{{}}. Only write formulas using raw LaTeX syntax, and never prefix them with words like 'TWA ='.\n\nAnswer:"
+        # Improved prompt for better LaTeX output
+        prompt = f"""Context:
+{full_context}
 
+Question: {question}
 
+Instructions: 
+1. If your answer includes mathematical formulas, place each formula on its own line surrounded by double dollar signs: $$formula$$
+2. Do NOT use \\text{{}} or \\mathrm{{}} commands
+3. Do NOT prefix formulas with variable names or equals signs
+4. Use standard LaTeX syntax for mathematical expressions
+5. For inline math in sentences, use single dollar signs: $variable$
+6. Keep formulas simple and avoid complex formatting
 
-        response = openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a helpful safety assistant. When outputting formulas, use valid LaTeX inside double dollar signs ($$). Avoid using \\text{} — just write plain variables or use \\mathrm{} if needed."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=300
-        )
+Answer:"""
 
-        st.session_state.answer = response.choices[0].message.content
-        st.session_state.minimal_context = minimal_context
-        st.session_state.full_context = full_context
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a helpful safety assistant. When outputting mathematical formulas, use clean LaTeX syntax inside double dollar signs ($$formula$$). Avoid \\text{} commands and prefixes. Place each formula on its own line."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=300
+            )
+
+            st.session_state.answer = response.choices[0].message.content
+            st.session_state.minimal_context = minimal_context
+            st.session_state.full_context = full_context
+            
+        except Exception as e:
+            st.error(f"Error getting response from OpenAI: {e}")
 
     if st.session_state.answer:
         st.subheader("Answer:")
-
-        from streamlit.components.v1 import html
-        def split_and_render(answer):
-            # Split into lines
-            lines = answer.split("\n")
-            for line in lines:
-                # Check if it's a LaTeX block (e.g., matches \frac or similar)
-                if re.match(r"^\s*\\(frac|sum|int|begin|end|cdot|times|text|sqrt|alpha|beta)", line.strip()):
-                    st.latex(line.strip())
-                else:
-                    st.markdown(clean_latex_output(line), unsafe_allow_html=True)
-
-                    
-        split_and_render(clean_latex_output(st.session_state.answer))
-
+        clean_and_render_response(st.session_state.answer)
     
         st.subheader("Sources:")
         st.write(st.session_state.minimal_context)
