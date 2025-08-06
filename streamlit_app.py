@@ -10,24 +10,25 @@ from io import BytesIO
 import re
 
 def clean_latex_output(text):
-    # Remove inline LaTeX markers
-    text = re.sub(r"\\\(|\\\)", "", text)
+    import re
 
-    # Convert inline terms
-    inline_terms = [r"C_i", r"T_i", r"\sum", r"C", r"T"]
+    # Remove \text{} and \mathrm{} (causes rendering issues)
+    text = re.sub(r"\\text\{(.*?)\}", r"\1", text)
+    text = re.sub(r"\\mathrm\{(.*?)\}", r"\1", text)
+
+    # Inline math: wrap common symbols in $
+    inline_terms = [r"C_i", r"T_i", r"\\sum", r"\\times"]
     for term in inline_terms:
         text = re.sub(rf"(?<!\$)\b({term})\b(?!\$)", r'$\1$', text)
 
-    # Remove \text{} which breaks block math in Streamlit
-    text = re.sub(r"\\text\{(.*?)\}", r'\1', text)
+    # Block math: wrap \frac{...}{...} lines in $$...$$ if not already
+    text = re.sub(r"(?<!\$)\s*(\\frac\{[^}]+\}\{[^}]+\})\s*(?!\$)", r"$$\1$$", text)
 
-    # ✅ Fix: convert lines like "TWA = $$...$$" to just "$$...$$"
-    text = re.sub(r"(.*?)=\s*\$\$(.*?)\$\$", r"$$\2$$", text)
-
-    # Avoid quadruple $$
-    text = re.sub(r"\${4,}", "$$", text)
+    # Remove any leftover double-prefix like "TWA = $$..."
+    text = re.sub(r"^\s*\w+\s*=\s*\$\$(.*?)\$\$", r"$$\1$$", text, flags=re.MULTILINE)
 
     return text
+
 
 
 
@@ -114,7 +115,7 @@ if all_dfs:
             minimal_context += f"{section_info}\n"
             full_context += f"{section_info}\n{row['text']}\n\n"
 
-        prompt = f"Context:\n{full_context}\n\nQuestion: {question}\n\nInstructions: If your answer includes any formulas or equations, format them using LaTeX inside double dollar signs ($$...$$) or standalone LaTeX blocks. Do not prefix formulas with words like 'TWA ='. Instead, place formulas on their own line for clean rendering. Avoid using \\text{{}} inside formulas.\n\nAnswer:"
+        prompt = f"Context:\n{full_context}\n\nQuestion: {question}\n\nInstructions: If your answer includes formulas, place them on their own line using LaTeX inside double dollar signs like $$...$$. Do not include math inside narrative sentences. Avoid using \\text{{}}. Only write formulas using raw LaTeX syntax, and never prefix them with words like 'TWA ='.\n\nAnswer:"
 
 
 
@@ -144,7 +145,8 @@ if all_dfs:
                 if re.match(r"^\s*\\(frac|sum|int|begin|end|cdot|times|text|sqrt|alpha|beta)", line.strip()):
                     st.latex(line.strip())
                 else:
-                    st.markdown(line, unsafe_allow_html=True)
+                    st.markdown(clean_latex_output(line), unsafe_allow_html=True)
+
                     
         split_and_render(clean_latex_output(st.session_state.answer))
 
