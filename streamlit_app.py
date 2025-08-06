@@ -89,12 +89,13 @@ if all_dfs:
             minimal_context += f"{section_info}\n"
             full_context += f"{section_info}\n{row['text']}\n\n"
 
-        prompt = f"Context:\n{full_context}\n\nQuestion: {question}\n\nAnswer:"
+        prompt = f"Context:\n{full_context}\n\nQuestion: {question}\n\nInstructions: If your answer includes any formulas or equations, format them using LaTeX syntax inside double dollar signs like $$E = mc^2$$ for correct rendering.\n\nAnswer:"
+
 
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a helpful safety assistant."},
+                {"role": "system", "content": "You are a helpful safety assistant.  Format any math or formulas using LaTex inside double dollar signs for display in Streamlit."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
