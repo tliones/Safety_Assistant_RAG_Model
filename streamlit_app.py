@@ -95,7 +95,7 @@ if all_dfs:
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a helpful safety assistant.  Format any math or formulas using LaTex inside double dollar signs for display in Streamlit."},
+                {"role": "system", "content": "You are a helpful safety assistant. Always format formulas using LaTeX, enclosed in double dollar signs like $$E = mc^2$$. Avoid splitting formulas across lines."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
