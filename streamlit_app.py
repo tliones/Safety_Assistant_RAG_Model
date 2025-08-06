@@ -114,7 +114,8 @@ if all_dfs:
             minimal_context += f"{section_info}\n"
             full_context += f"{section_info}\n{row['text']}\n\n"
 
-        prompt = f"Context:\n{full_context}\n\nQuestion: {question}\n\nInstructions: If your answer includes any formulas or equations, format them using LaTeX syntax inside double dollar signs like $$E = mc^2$$ for correct rendering.\n\nAnswer:"
+        prompt = f"Context:\n{full_context}\n\nQuestion: {question}\n\nInstructions: If your answer includes any formulas or equations, format them using LaTeX inside double dollar signs ($$...$$) or standalone LaTeX blocks. Do not prefix formulas with words like 'TWA ='. Instead, place formulas on their own line for clean rendering. Avoid using \\text{{}} inside formulas.\n\nAnswer:"
+
 
 
         response = openai.chat.completions.create(
@@ -133,10 +134,21 @@ if all_dfs:
 
     if st.session_state.answer:
         st.subheader("Answer:")
-        formatted_answer = clean_latex_output(st.session_state.answer)
-        st.markdown(formatted_answer, unsafe_allow_html=True)
 
+        from streamlit.components.v1 import html
+        def split_and_render(answer):
+            # Split into lines
+            lines = answer.split("\n")
+            for line in lines:
+                # Check if it's a LaTeX block (e.g., matches \frac or similar)
+                if re.match(r"^\s*\\(frac|sum|int|begin|end|cdot|times|text|sqrt|alpha|beta)", line.strip()):
+                    st.latex(line.strip())
+                else:
+                    st.markdown(line, unsafe_allow_html=True)
+                    
+        split_and_render(clean_latex_output(st.session_state.answer))
 
+    
         st.subheader("Sources:")
         st.write(st.session_state.minimal_context)
 
