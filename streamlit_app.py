@@ -10,24 +10,25 @@ from io import BytesIO
 import re
 
 def clean_latex_output(text):
-    # Remove \( \) for inline LaTeX
+    # Remove inline LaTeX markers
     text = re.sub(r"\\\(|\\\)", "", text)
 
-    # Convert inline terms to math format
+    # Convert inline terms
     inline_terms = [r"C_i", r"T_i", r"\sum", r"C", r"T"]
     for term in inline_terms:
         text = re.sub(rf"(?<!\$)\b({term})\b(?!\$)", r'$\1$', text)
 
-    # Remove \text{} blocks which MathJax often breaks on
+    # Remove \text{} which breaks block math in Streamlit
     text = re.sub(r"\\text\{(.*?)\}", r'\1', text)
 
-    # Wrap block equations like \frac{...}{...}
-    text = re.sub(r"(\\frac\s*\{[^}]+\}\s*\{[^}]+\})", r"$$\1$$", text)
+    # ✅ Fix: convert lines like "TWA = $$...$$" to just "$$...$$"
+    text = re.sub(r"(.*?)=\s*\$\$(.*?)\$\$", r"$$\2$$", text)
 
     # Avoid quadruple $$
     text = re.sub(r"\${4,}", "$$", text)
 
     return text
+
 
 
 
