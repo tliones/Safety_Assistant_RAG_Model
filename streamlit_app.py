@@ -189,7 +189,7 @@ Answer:"""
             st.write(st.session_state.full_context)
 
 else:
-    st.warning("No documents selected or no valid files found."), r'$\1
+    st.warning("No documents selected or no valid files found."), r'$\1'
 
 # Load secrets securely from Streamlit Cloud
 openai.api_key = st.secrets["OPENAI_API_KEY"]
