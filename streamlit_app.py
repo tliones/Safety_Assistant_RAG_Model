@@ -10,16 +10,22 @@ from io import BytesIO
 import re
 
 def clean_latex_output(text):
-    # Remove broken inline LaTeX like \( ... \)
+    # Remove inline LaTeX markers like \( and \)
     text = re.sub(r"\\\(|\\\)", "", text)
 
-    # Ensure each block LaTeX formula is wrapped in $$...$$
+    # Wrap known inline math terms in $...$
+    inline_terms = [r"C_i", r"T_i", r"\sum", r"E", r"C", r"T"]
+    for term in inline_terms:
+        text = re.sub(rf"(?<!\$)\b({term})\b(?!\$)", r'$\1$', text)
+
+    # Fix block formulas wrapped like: E = \frac{...}
     text = re.sub(r"(?<!\$)\[?\s*(E\s*=\s*\\frac.*?)(\]|\n|$)", r"$$\1$$", text, flags=re.DOTALL)
 
-    # Avoid quadruple $$ by removing repeated wraps
+    # Collapse duplicate dollar signs
     text = re.sub(r"\${4,}", "$$", text)
 
     return text
+
 
 
 # Load secrets securely from Streamlit Cloud
