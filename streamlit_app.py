@@ -49,73 +49,58 @@ def clean_and_render_response(text):
     text = re.sub(r'\\text\{([^}]*)\}', r'\1', text)
     text = re.sub(r'\\mathrm\{([^}]*)\}', r'\1', text)
     
-    lines = text.split('\n')
-    i = 0
+    # Split into paragraphs instead of lines for better processing
+    paragraphs = text.split('\n\n')
     
-    while i < len(lines):
-        line = lines[i].strip()
+    for paragraph in paragraphs:
+        paragraph = paragraph.strip()
         
-        # Handle empty lines
-        if not line:
-            st.write("")
-            i += 1
+        if not paragraph:
             continue
+            
+        lines = paragraph.split('\n')
         
-        # Handle block LaTeX ($$...$$)
-        if line.startswith('$$') and line.endswith('$$') and len(line) > 4:
-            formula = line[2:-2].strip()
+        # Check if this is a standalone formula (contains LaTeX symbols and math operators)
+        is_formula_block = False
+        if len(lines) == 1:
+            line = lines[0].strip()
+            # Detect formulas that should be rendered as LaTeX blocks
+            if (re.search(r'[=+\-*/]', line) and 
+                re.search(r'\\[a-zA-Z]+|_\{[^}]+\}|\^\{[^}]+\}|[_{^]', line) and
+                not line.startswith('#') and not line.startswith('*') and not line.startswith('-')):
+                is_formula_block = True
+        
+        if is_formula_block:
+            formula = lines[0].strip()
+            # Remove any existing $ wrapping
+            if formula.startswith('$') and formula.endswith('$'):
+                formula = formula[2:-2]
             try:
                 st.latex(formula)
             except Exception as e:
-                st.code(f"LaTeX Error: {formula}")
-            i += 1
-            continue
-        
-        # Handle multiline block LaTeX
-        if line.startswith('$$') and not line.endswith('$$'):
-            formula_lines = [line[2:]]  # Remove opening $$
-            i += 1
-            
-            # Collect lines until we find closing $$
-            while i < len(lines):
-                next_line = lines[i].strip()
-                if next_line.endswith('$$'):
-                    formula_lines.append(next_line[:-2])  # Remove closing $$
-                    i += 1
-                    break
-                else:
-                    formula_lines.append(next_line)
-                    i += 1
-            
-            formula = '\n'.join(formula_lines).strip()
-            try:
-                st.latex(formula)
-            except Exception as e:
-                st.code(f"LaTeX Error: {formula}")
-            continue
-        
-        # Process line for inline LaTeX and markdown
-        processed_line = process_inline_latex(line)
-        
-        try:
-            st.markdown(processed_line, unsafe_allow_html=True)
-        except Exception as e:
-            st.write(line)
-        
-        i += 1
-
-def process_inline_latex(text):
-    """Process inline LaTeX in markdown text"""
-    # Find all inline LaTeX expressions ($...$)
-    def replace_inline_latex(match):
-        latex_content = match.group(1)
-        # Clean up the LaTeX content
-        latex_content = latex_content.strip()
-        return f"${latex_content}$"
-    
-    # Replace inline LaTeX expressions
-    processed = re.sub(r'\$([^$]+)\$', replace_inline_latex, text)
-    return processed
+                st.code(f"Formula: {formula}")
+        else:
+            # Process as markdown with potential inline LaTeX
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    st.write("")
+                    continue
+                
+                # Handle explicit block LaTeX ($...$)
+                if line.startswith('$') and line.endswith('$') and len(line) > 4:
+                    formula = line[2:-2].strip()
+                    try:
+                        st.latex(formula)
+                    except Exception as e:
+                        st.code(f"Formula: {formula}")
+                    continue
+                
+                # Process as regular markdown with inline LaTeX support
+                try:
+                    st.markdown(line, unsafe_allow_html=True)
+                except Exception as e:
+                    st.write(line)
 
 # --- UI for document selection ---
 selected_docs = st.multiselect("Select document sources to search:", list(DOCUMENTS.keys()), default=[])
@@ -174,12 +159,12 @@ if all_dfs:
 Question: {question}
 
 Instructions: 
-1. For mathematical formulas that should be displayed as blocks, place each formula on its own line surrounded by double dollar signs: $$formula$$
-2. For inline math variables or simple expressions, use single dollar signs: $x$
-3. Do NOT use \\text{{}} or \\mathrm{{}} commands - use plain text instead
-4. For units, write them as plain text: "5 mg/m³" instead of "5 \\text{{mg/m³}}"
-5. Use standard markdown formatting (bullets, bold, italics) as needed
-6. Keep LaTeX simple and avoid complex formatting commands
+1. For mathematical formulas, write them WITHOUT dollar signs or LaTeX wrappers - just the plain formula
+2. Put important formulas on their own lines
+3. For variables in text, you can use standard notation like T_wb, T_g, etc.
+4. Use regular text formatting and bullet points
+5. Write units as plain text: "5 mg/m³" or "degrees C"
+6. Keep formatting simple and clear
 
 Answer:"""
 
@@ -187,7 +172,7 @@ Answer:"""
             response = openai.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are a helpful safety assistant. Use simple LaTeX notation for math: $$....$$ for block formulas and $...$ for inline math. Avoid complex LaTeX commands. Write units as plain text."},
+                    {"role": "system", "content": "You are a helpful safety assistant. Write mathematical formulas as plain text without dollar signs. The app will automatically detect and render them. Use clear formatting with formulas on separate lines when appropriate."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
@@ -215,5 +200,4 @@ Answer:"""
 
 else:
     st.warning("No documents selected or no valid files found.")
-
 
