@@ -11,6 +11,7 @@ import re
 
 def format_latex_blocks(text):
     # Wraps formulas like E = \frac{...} in $$...$$ if not already wrapped
+    text = re.sub(r"\[([^\[\]]*\\frac[^\[\]]*)\]", r"$$\1$$", text)
     return re.sub(r"(?<!\$)\[?\s*(E\s*=\s*\\frac.*?)(\]|\n|$)", r"$$\1$$", text, flags=re.DOTALL)
 
 
