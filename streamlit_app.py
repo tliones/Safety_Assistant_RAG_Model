@@ -10,21 +10,25 @@ from io import BytesIO
 import re
 
 def clean_latex_output(text):
-    # Remove inline LaTeX markers like \( and \)
+    # Remove \( \) for inline LaTeX
     text = re.sub(r"\\\(|\\\)", "", text)
 
-    # Wrap known inline math terms in $...$
-    inline_terms = [r"C_i", r"T_i", r"\sum", r"E", r"C", r"T"]
+    # Convert inline terms to math format
+    inline_terms = [r"C_i", r"T_i", r"\sum", r"C", r"T"]
     for term in inline_terms:
         text = re.sub(rf"(?<!\$)\b({term})\b(?!\$)", r'$\1$', text)
 
-    # Fix block formulas wrapped like: E = \frac{...}
-    text = re.sub(r"(?<!\$)\[?\s*(E\s*=\s*\\frac.*?)(\]|\n|$)", r"$$\1$$", text, flags=re.DOTALL)
+    # Remove \text{} blocks which MathJax often breaks on
+    text = re.sub(r"\\text\{(.*?)\}", r'\1', text)
 
-    # Collapse duplicate dollar signs
+    # Wrap block equations like \frac{...}{...}
+    text = re.sub(r"(\\frac\s*\{[^}]+\}\s*\{[^}]+\})", r"$$\1$$", text)
+
+    # Avoid quadruple $$
     text = re.sub(r"\${4,}", "$$", text)
 
     return text
+
 
 
 
@@ -115,7 +119,7 @@ if all_dfs:
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a helpful safety assistant. Always format formulas using LaTeX, and enclose them in double dollar signs like $$E = mc^2$$. Do not use \\( ... \\) or inline math."},
+                {"role": "system", "content": "You are a helpful safety assistant. When outputting formulas, use valid LaTeX inside double dollar signs ($$). Avoid using \\text{} — just write plain variables or use \\mathrm{} if needed."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
