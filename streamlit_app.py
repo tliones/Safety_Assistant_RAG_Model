@@ -7,6 +7,13 @@ import openai
 import dropbox
 import os
 from io import BytesIO
+import re
+
+def format_latex_blocks(text):
+    # Wraps formulas like E = \frac{...} in $$...$$ if not already wrapped
+    return re.sub(r"(?<!\$)\[?\s*(E\s*=\s*\\frac.*?)(\]|\n|$)", r"$$\1$$", text, flags=re.DOTALL)
+
+
 
 # Load secrets securely from Streamlit Cloud
 openai.api_key = st.secrets["OPENAI_API_KEY"]
@@ -108,7 +115,8 @@ if all_dfs:
 
     if st.session_state.answer:
         st.subheader("Answer:")
-        st.write(st.session_state.answer)
+        formatted_answer = format_latex_blocks(st.session_state.answer)
+        st.markdown(formatted_answer, unsafe_allow_html=True)
 
         st.subheader("Sources:")
         st.write(st.session_state.minimal_context)
