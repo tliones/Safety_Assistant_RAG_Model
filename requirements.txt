@@ -1,1 +1,8 @@
+streamlit
+dropbox
+openai
+pandas
+numpy
+sentence-transformers
+scikit-learn
 
