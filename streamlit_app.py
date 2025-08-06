@@ -47,29 +47,40 @@ def clean_and_render_response(text):
         if not line:
             st.write("")
             continue
+
         if (line.startswith('$$') and line.endswith('$$')) or \
            re.search(r'\\(frac|sum|int|sqrt|alpha|beta|gamma|delta|times|cdot|partial)', line):
+
             latex_line = line
             if latex_line.startswith('$$') and latex_line.endswith('$$'):
                 latex_line = latex_line[2:-2]
+
+            # Fix invalid LaTeX commands
             latex_line = re.sub(r'\\text\{([^}]*)\}', r'\1', latex_line)
             latex_line = re.sub(r'\\mathrm\{([^}]*)\}', r'\1', latex_line)
-            latex_line = re.sub(r'\b(mg|kg|g|lb|oz|ppm|ppb|°C|°F|K)\b', r'\\text{\1}', latex_line)
-            latex_line = re.sub(r'\b(m|cm|mm|ft|in|yd)\b(?=[\^/])', r'\\text{\1}', latex_line)
+            latex_line = re.sub(r'\\mug', r'\\mu\\text{g}', latex_line)
+            latex_line = re.sub(r'µg', r'\\mu\\text{g}', latex_line)
+
+            # Fix unit spacing
             latex_line = re.sub(r'(\d+)\s*(mg|kg|g|lb|oz|ppm|ppb)', r'\1\\,\\text{\2}', latex_line)
             latex_line = re.sub(r'(mg|kg|g|lb|oz)/\s*(m|cm|mm|ft|in)', r'\\text{\1}/\\text{\2}', latex_line)
-            latex_line = re.sub(r'^[A-Za-z\s]*=\s*', '', latex_line)
-            latex_line = re.sub(r'^[A-Za-z\s]*:\s*', '', latex_line)
+            latex_line = re.sub(r'\b(m|cm|mm|ft|in|yd)\b(?=[\^/])', r'\\text{\1}', latex_line)
+
+            # Remove leading prefixes
+            latex_line = re.sub(r'^[A-Za-z\s]*[:=]\s*', '', latex_line)
+
             try:
                 st.latex(latex_line)
             except Exception:
                 st.markdown(f"`{line}`")
+
         else:
+            # Inline math fix
             processed_line = re.sub(r'\$(.+?)\$', r'\\(\1\\)', line)
             processed_line = re.sub(r'\\text\{([^}]*)\}', r'\1', processed_line)
             st.markdown(processed_line, unsafe_allow_html=True)
 
-# Main app
+# UI input
 selected_docs = st.multiselect("Select document sources to search:", list(DOCUMENTS.keys()), default=[])
 
 all_dfs = []
@@ -165,4 +176,5 @@ Answer:"""
 
 else:
     st.warning("No documents selected or no valid files found.")
+
 
