@@ -109,7 +109,7 @@ if all_dfs:
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a helpful safety assistant. Always format formulas using LaTeX, enclosed in double dollar signs like $$E = mc^2$$. Avoid splitting formulas across lines."},
+                {"role": "system", "content": "You are a helpful safety assistant. Always format formulas using LaTeX, and enclose them in double dollar signs like $$E = mc^2$$. Do not use \\( ... \\) or inline math."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
@@ -122,8 +122,9 @@ if all_dfs:
 
     if st.session_state.answer:
         st.subheader("Answer:")
-        formatted_answer = format_latex_blocks(st.session_state.answer)
+        formatted_answer = clean_latex_output(st.session_state.answer)
         st.markdown(formatted_answer, unsafe_allow_html=True)
+
 
         st.subheader("Sources:")
         st.write(st.session_state.minimal_context)
