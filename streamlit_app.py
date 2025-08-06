@@ -44,39 +44,55 @@ def load_npy_from_dropbox(path):
 # --- Clean and render LaTeX and markdown ---
 def clean_and_render_response(text):
     lines = text.split('\n')
+
     for line in lines:
         line = line.strip()
         if not line:
             st.write("")
             continue
 
-        # Fix LaTeX issues
+        # Fix invalid LaTeX
         line = re.sub(r'\\mug', r'\\mu\\text{g}', line)
         line = re.sub(r'µg', r'\\mu\\text{g}', line)
-        line = re.sub(r'\\text\{([^}]*)\}', r'\1', line)  # remove \text{}
+        line = re.sub(r'\\text\{([^}]*)\}', r'\1', line)
         line = re.sub(r'\\mathrm\{([^}]*)\}', r'\1', line)
 
-        # Full block LaTeX
+        # Detect block formulas and render with st.latex
+        if (
+            re.fullmatch(r'[0-9a-zA-Z\s\\\+\-\*/\^\(\)\._]+', line) and
+            any(x in line for x in ['\\times', '_', '^'])
+        ):
+            try:
+                st.latex(line)
+                continue
+            except Exception:
+                st.markdown(f"`{line}`")
+                continue
+
+        # Detect wrapped block LaTeX
         if line.startswith('$$') and line.endswith('$$'):
             try:
                 st.latex(line[2:-2])
+                continue
             except Exception:
                 st.markdown(f"`{line}`")
-            continue
+                continue
 
-        # Inline-only LaTeX line
+        # If line is fully inline LaTeX like "$x = y$"
         if re.fullmatch(r'\$[^$]+\$', line):
             try:
                 st.latex(line[1:-1])
+                continue
             except Exception:
                 st.markdown(f"`{line}`")
-            continue
+                continue
 
-        # General mixed markdown (with inline $...$)
+        # Otherwise, it's general markdown with optional inline LaTeX
         try:
             st.markdown(line, unsafe_allow_html=True)
         except Exception:
             st.markdown(f"`{line}`")
+
 
 # --- UI for document selection ---
 selected_docs = st.multiselect("Select document sources to search:", list(DOCUMENTS.keys()), default=[])
