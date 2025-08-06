@@ -9,14 +9,14 @@ import os
 from io import BytesIO
 import re
 
-# Load secrets securely from Streamlit Cloud
+# --- Load secrets ---
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 DROPBOX_TOKEN = st.secrets["DROPBOX_TOKEN"]
 dbx = dropbox.Dropbox(DROPBOX_TOKEN)
 
 st.title("Safety Document QA Assistant - Dropbox Version")
 
-# Dropbox file paths
+# --- Dropbox file paths ---
 DOCUMENTS = {
     "Company Safety Manual": {
         "csv": "/company_safety_manual_sections.csv",
@@ -32,6 +32,7 @@ DOCUMENTS = {
     }
 }
 
+# --- Dropbox file loading ---
 def load_csv_from_dropbox(path):
     _, res = dbx.files_download(path)
     return pd.read_csv(BytesIO(res.content))
@@ -40,6 +41,7 @@ def load_npy_from_dropbox(path):
     _, res = dbx.files_download(path)
     return np.load(BytesIO(res.content), allow_pickle=True)
 
+# --- Clean and render LaTeX and markdown ---
 def clean_and_render_response(text):
     lines = text.split('\n')
     for line in lines:
@@ -48,54 +50,50 @@ def clean_and_render_response(text):
             st.write("")
             continue
 
-        if (line.startswith('$$') and line.endswith('$$')) or \
-           re.search(r'\\(frac|sum|int|sqrt|alpha|beta|gamma|delta|times|cdot|partial)', line):
+        # Fix LaTeX issues
+        line = re.sub(r'\\mug', r'\\mu\\text{g}', line)
+        line = re.sub(r'µg', r'\\mu\\text{g}', line)
+        line = re.sub(r'\\text\{([^}]*)\}', r'\1', line)  # remove \text{}
+        line = re.sub(r'\\mathrm\{([^}]*)\}', r'\1', line)
 
-            latex_line = line
-            if latex_line.startswith('$$') and latex_line.endswith('$$'):
-                latex_line = latex_line[2:-2]
-
-            # Fix invalid LaTeX commands
-            latex_line = re.sub(r'\\text\{([^}]*)\}', r'\1', latex_line)
-            latex_line = re.sub(r'\\mathrm\{([^}]*)\}', r'\1', latex_line)
-            latex_line = re.sub(r'\\mug', r'\\mu\\text{g}', latex_line)
-            latex_line = re.sub(r'µg', r'\\mu\\text{g}', latex_line)
-
-            # Fix unit spacing
-            latex_line = re.sub(r'(\d+)\s*(mg|kg|g|lb|oz|ppm|ppb)', r'\1\\,\\text{\2}', latex_line)
-            latex_line = re.sub(r'(mg|kg|g|lb|oz)/\s*(m|cm|mm|ft|in)', r'\\text{\1}/\\text{\2}', latex_line)
-            latex_line = re.sub(r'\b(m|cm|mm|ft|in|yd)\b(?=[\^/])', r'\\text{\1}', latex_line)
-
-            # Remove leading prefixes
-            latex_line = re.sub(r'^[A-Za-z\s]*[:=]\s*', '', latex_line)
-
+        # Full block LaTeX
+        if line.startswith('$$') and line.endswith('$$'):
             try:
-                st.latex(latex_line)
+                st.latex(line[2:-2])
             except Exception:
                 st.markdown(f"`{line}`")
+            continue
 
-        else:
-            # Inline math fix
-            processed_line = re.sub(r'\$(.+?)\$', r'\\(\1\\)', line)
-            processed_line = re.sub(r'\\text\{([^}]*)\}', r'\1', processed_line)
-            st.markdown(processed_line, unsafe_allow_html=True)
+        # Inline-only LaTeX line
+        if re.fullmatch(r'\$[^$]+\$', line):
+            try:
+                st.latex(line[1:-1])
+            except Exception:
+                st.markdown(f"`{line}`")
+            continue
 
-# UI input
+        # General mixed markdown (with inline $...$)
+        try:
+            st.markdown(line, unsafe_allow_html=True)
+        except Exception:
+            st.markdown(f"`{line}`")
+
+# --- UI for document selection ---
 selected_docs = st.multiselect("Select document sources to search:", list(DOCUMENTS.keys()), default=[])
 
 all_dfs = []
 all_embeddings = []
 
 for doc_name in selected_docs:
-    paths = DOCUMENTS[doc_name]
     try:
-        df = load_csv_from_dropbox(paths['csv'])
-        embeddings = load_npy_from_dropbox(paths['npy'])
+        df = load_csv_from_dropbox(DOCUMENTS[doc_name]["csv"])
+        emb = load_npy_from_dropbox(DOCUMENTS[doc_name]["npy"])
         all_dfs.append(df)
-        all_embeddings.append(embeddings)
+        all_embeddings.append(emb)
     except Exception as e:
         st.error(f"Error loading {doc_name}: {e}")
 
+# --- Main logic ---
 if all_dfs:
     combined_df = pd.concat(all_dfs, ignore_index=True)
     combined_embeddings = np.vstack(all_embeddings)
@@ -130,6 +128,7 @@ if all_dfs:
             minimal_context += f"{section_info}\n"
             full_context += f"{section_info}\n{row['text']}\n\n"
 
+        # RAG Prompt
         prompt = f"""Context:
 {full_context}
 
@@ -137,11 +136,10 @@ Question: {question}
 
 Instructions: 
 1. If your answer includes mathematical formulas, place each formula on its own line surrounded by double dollar signs: $$formula$$
-2. Do NOT use \\text{{}} or \\mathrm{{}} commands
-3. Do NOT prefix formulas with variable names or equals signs
-4. Use standard LaTeX syntax for mathematical expressions
-5. For inline math in sentences, use single dollar signs: $variable$
-6. Keep formulas simple and avoid complex formatting
+2. Use inline math like $x$ for variables.
+3. Do NOT use \\text{{}} or \\mathrm{{}} commands.
+4. Keep formatting simple and compatible with LaTeX parsers.
+5. Use bullet points or markdown if applicable.
 
 Answer:"""
 
@@ -149,7 +147,7 @@ Answer:"""
             response = openai.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are a helpful safety assistant. When outputting mathematical formulas, use clean LaTeX syntax inside double dollar signs ($$formula$$). Avoid \\text{} commands and prefixes. Place each formula on its own line."},
+                    {"role": "system", "content": "You are a helpful safety assistant. Respond with markdown text and clean LaTeX inside $$...$$ or $...$. Do not use unnecessary formatting."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
@@ -163,6 +161,7 @@ Answer:"""
         except Exception as e:
             st.error(f"Error getting response from OpenAI: {e}")
 
+    # --- Render output ---
     if st.session_state.answer:
         st.subheader("Answer:")
         clean_and_render_response(st.session_state.answer)
