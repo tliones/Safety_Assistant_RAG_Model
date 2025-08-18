@@ -122,7 +122,7 @@ if all_dfs:
     combined_df = pd.concat(all_dfs, ignore_index=True)
     combined_embeddings = np.vstack(all_embeddings)
 
-    model = SentenceTransformer("all-mpnet-base-v2")
+    model = SentenceTransformer("all-mpnet-base-v2", device = "cpu")
 
     question = st.text_input("Ask your safety question:")
 
